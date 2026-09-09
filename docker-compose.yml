@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-draftroom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-draftroom}
+      POSTGRES_DB: ${POSTGRES_DB:-draftroom}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - draftroom_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-draftroom}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-draftroom}:${POSTGRES_PASSWORD:-draftroom}@db:5432/${POSTGRES_DB:-draftroom}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      CURRENT_DRAFT_YEAR: ${CURRENT_DRAFT_YEAR:-2026}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DATA_DIR: /data
+      BACKEND_DIR: /app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/data
+      - ./scripts:/scripts
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  draftroom_db_data:
